@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sys, json, pickle
+import sys, json
 
 # Check for dependacies
 try:
