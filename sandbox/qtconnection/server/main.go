@@ -7,14 +7,13 @@ import (
 	"io"
 	"log"
 	"net"
-	"strconv"
 )
 
 type Person struct {
 	FirstName string
 	LastName  string
 	MyArray   []int
-	MyMap     map[int]bool
+	MyMap     map[string]bool
 }
 
 func main() {
@@ -40,22 +39,33 @@ func handleClient(conn net.Conn) {
 	defer fmt.Printf("Disconnected: %s\n", conn.RemoteAddr().String())
 	defer conn.Close()
 
-	var counter int
-
 	for {
-		var person Person
+		// Read json object from client
+		var cperson Person
 
 		buf, _ := readAll(conn)
-		err := json.Unmarshal(buf, &person)
+		err := json.Unmarshal(buf, &cperson)
 		if err != nil {
 			fmt.Println(err)
 			return
 		}
 		fmt.Print("From client: ")
-		fmt.Println(person)
+		fmt.Println(cperson)
 
-		counter++
-		conn.Write([]byte("Count: " + strconv.Itoa(counter)))
+		// Write json object to client
+		sperson := Person{
+			FirstName: "Nancy",
+			LastName:  "Star",
+			MyArray:   []int{101, 23, 15, 66},
+			MyMap:     map[string]bool{"101": true, "203": true},
+		}
+
+		data, err := json.Marshal(sperson)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		conn.Write(data)
 	}
 }
 

@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sys, json
+import sys, json, pickle
 
 # Check for dependacies
 try:
@@ -23,12 +23,15 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtNetwork import QTcpSocket
 
 class Person(object):
-    def __init__(self, fn: str, ln: str) -> None:
-        self.firstName = fn
-        self.lastName = ln
-        self.myarray = [10, 2, 32]
-        self.mymap = { 0: False, 1: True }
-        
+    def __init__(self,
+                 FirstName: str,
+                 LastName: str,
+                 MyArray: list[int],
+                 MyMap: dict[str, bool]) -> None:
+        self.firstName = FirstName
+        self.lastName = LastName
+        self.myArray = MyArray
+        self.myMap = MyMap
 
 class SandBoxWidget(QWidget):
     def __init__(self, parent: QWidget | None) -> None:
@@ -58,9 +61,14 @@ class SandBoxWidget(QWidget):
         print("Port:" + str(self.conn.peerPort()))
         
     def _tcpRead(self):
-        n = self.conn.bytesAvailable()
-        buf = str(self.conn.read(n))
-        self.readLabel.setText(buf)
+        # Create person object from server json
+        data = self.conn.readAll().data().decode()
+        j = json.loads(data)
+        person = Person(**j)
+        
+        print(person.myArray, person.myMap)
+        
+        self.readLabel.setText(data)
         
     def _connectPressed(self):
         self.conn.connectToHost("127.0.0.1", 1200)
@@ -69,7 +77,8 @@ class SandBoxWidget(QWidget):
         self.conn.close()
         
     def _actionPressed(self):
-        person = Person("Bob", "Winner")
+        # Send json object to server
+        person = Person("Bob", "Winner", [12, 32, 54], {"1": True, "0": False})
         jsonobj = json.dumps(vars(person))
         
         buf = bytearray()
