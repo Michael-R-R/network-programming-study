@@ -28,7 +28,7 @@ const ( // Board piece types
 
 const ( // Message types
 	BOARD_UPDATE = "10"
-	PLAYER_TURN  = "11"
+	PLAYER_STATE = "11"
 	BANNER       = "12"
 	ASSIGN       = "13"
 )
@@ -37,7 +37,9 @@ var connections map[Player]net.Conn // [player id, connection]
 var gameBoard GameBoard
 var player1 Player
 var player2 Player
+
 var currentPlayer *Player
+var waitingPlayer *Player
 
 func init() {
 	connections = make(map[Player]net.Conn)
@@ -49,6 +51,7 @@ func init() {
 	player1 = Player{Id: 1, Name: "Player1", Assigned: NONE}
 	player2 = Player{Id: 2, Name: "Player2", Assigned: NONE}
 	currentPlayer = nil
+	waitingPlayer = nil
 }
 
 func main() {
@@ -96,11 +99,15 @@ func initPieces() {
 	if n < 50 {
 		player1.Assigned = X_PIECE
 		player2.Assigned = O_PIECE
+
 		currentPlayer = &player1
+		waitingPlayer = &player2
 	} else {
 		player1.Assigned = O_PIECE
 		player2.Assigned = X_PIECE
+
 		currentPlayer = &player2
+		waitingPlayer = &player1
 	}
 
 	// Update connections about assigned pieces
@@ -113,9 +120,13 @@ func initPieces() {
 		c.Write([]byte(msg))
 	}
 
-	// Set first move current player
-	connections[*currentPlayer].Write([]byte(PLAYER_TURN))
+	// Update current player turn state
+	connections[*currentPlayer].Write([]byte(PLAYER_STATE))
 	connections[*currentPlayer].Write([]byte("1"))
+
+	// Update waiting player turn state
+	connections[*waitingPlayer].Write([]byte(PLAYER_STATE))
+	connections[*waitingPlayer].Write([]byte("0"))
 }
 
 func gameLoop() {
@@ -145,18 +156,36 @@ func gameLoop() {
 					return
 				}
 
+				// Parse and convert the data
 				data := strings.TrimSpace(string(buf[0:n]))
 				rowcol := strings.Split(data, ",")
 				row, _ := strconv.Atoi(rowcol[0])
 				col, _ := strconv.Atoi(rowcol[1])
 
-				// Record selection
+				// Record player selection
+				gameBoard.Board[row][col] = currentPlayer.Assigned
 
-				// Update players with banner
+				// TODO check for winning state
+
+				// Update waiting player board state
+				connections[*waitingPlayer].Write([]byte(BOARD_UPDATE))
+				connections[*waitingPlayer].Write([]byte(data))
+
+				// Update waiting player banner
+				banner := fmt.Sprintf("%s selected row: %d col: %d", currentPlayer.Name, row, col)
+				connections[*waitingPlayer].Write([]byte(BANNER))
+				connections[*waitingPlayer].Write([]byte(banner))
 
 				// Set player states
+				temp := currentPlayer
+				currentPlayer = waitingPlayer
+				waitingPlayer = temp
 
-				// Assign new current player
+				connections[*currentPlayer].Write([]byte(PLAYER_STATE))
+				connections[*currentPlayer].Write([]byte("1"))
+
+				connections[*waitingPlayer].Write([]byte(PLAYER_STATE))
+				connections[*waitingPlayer].Write([]byte("0"))
 			}
 		}
 	}
