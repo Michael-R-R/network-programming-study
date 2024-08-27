@@ -33,7 +33,7 @@ const ( // Message types
 	ASSIGN       = "13"
 )
 
-var connections map[Player]net.Conn // [player id, connection]
+var connections map[string]net.Conn // [player id, connection]
 var gameBoard GameBoard
 var player1 Player
 var player2 Player
@@ -42,7 +42,7 @@ var currentPlayer *Player
 var waitingPlayer *Player
 
 func init() {
-	connections = make(map[Player]net.Conn)
+	connections = make(map[string]net.Conn)
 	gameBoard = GameBoard{Board: [][]int{
 		{NONE, NONE, NONE},
 		{NONE, NONE, NONE},
@@ -84,10 +84,12 @@ func initConnections(listener net.Listener) {
 			continue
 		}
 
+		fmt.Printf("Connected: %s\n", conn.RemoteAddr().String())
+
 		if len(connections) == 0 {
-			connections[player1] = conn
+			connections[player1.Name] = conn
 		} else {
-			connections[player2] = conn
+			connections[player2.Name] = conn
 		}
 	}
 }
@@ -96,7 +98,7 @@ func gameLoop() {
 	initPieces()
 
 	for {
-		conn := connections[*currentPlayer]
+		conn := connections[currentPlayer.Name]
 
 		var buf [512]byte
 
@@ -131,24 +133,24 @@ func gameLoop() {
 				// TODO check for winning state
 
 				// Update waiting player board state
-				connections[*waitingPlayer].Write([]byte(BOARD_UPDATE))
-				connections[*waitingPlayer].Write([]byte(data))
+				connections[waitingPlayer.Name].Write([]byte(BOARD_UPDATE))
+				connections[waitingPlayer.Name].Write([]byte(data))
 
 				// Update waiting player banner
 				banner := fmt.Sprintf("%s selected row: %d col: %d", currentPlayer.Name, row, col)
-				connections[*waitingPlayer].Write([]byte(BANNER))
-				connections[*waitingPlayer].Write([]byte(banner))
+				connections[waitingPlayer.Name].Write([]byte(BANNER))
+				connections[waitingPlayer.Name].Write([]byte(banner))
 
 				// Update player states
 				temp := currentPlayer
 				currentPlayer = waitingPlayer
 				waitingPlayer = temp
 
-				connections[*currentPlayer].Write([]byte(PLAYER_STATE))
-				connections[*currentPlayer].Write([]byte("1"))
+				connections[currentPlayer.Name].Write([]byte(PLAYER_STATE))
+				connections[currentPlayer.Name].Write([]byte("1"))
 
-				connections[*waitingPlayer].Write([]byte(PLAYER_STATE))
-				connections[*waitingPlayer].Write([]byte("0"))
+				connections[waitingPlayer.Name].Write([]byte(PLAYER_STATE))
+				connections[waitingPlayer.Name].Write([]byte("0"))
 			}
 		}
 	}
@@ -174,21 +176,24 @@ func initPieces() {
 
 	// Update connections about assigned pieces
 	banner := fmt.Sprintf("%s is first move", currentPlayer.Name)
-	for p, c := range connections {
-		c.Write([]byte(ASSIGN))
-		c.Write([]byte(strconv.Itoa(p.Assigned)))
-
+	for _, c := range connections {
 		c.Write([]byte(BANNER))
 		c.Write([]byte(banner))
 	}
 
 	// Update current player turn state
-	connections[*currentPlayer].Write([]byte(PLAYER_STATE))
-	connections[*currentPlayer].Write([]byte("1"))
+	conn1 := connections[currentPlayer.Name]
+	conn1.Write([]byte(ASSIGN))
+	conn1.Write([]byte(strconv.Itoa(currentPlayer.Assigned)))
+	conn1.Write([]byte(PLAYER_STATE))
+	conn1.Write([]byte("1"))
 
 	// Update waiting player turn state
-	connections[*waitingPlayer].Write([]byte(PLAYER_STATE))
-	connections[*waitingPlayer].Write([]byte("0"))
+	conn2 := connections[waitingPlayer.Name]
+	conn2.Write([]byte(ASSIGN))
+	conn2.Write([]byte(strconv.Itoa(currentPlayer.Assigned)))
+	conn2.Write([]byte(PLAYER_STATE))
+	conn2.Write([]byte("0"))
 }
 
 func cleanup(listener net.Listener) {
