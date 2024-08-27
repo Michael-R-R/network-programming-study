@@ -92,43 +92,6 @@ func initConnections(listener net.Listener) {
 	}
 }
 
-func initPieces() {
-	// Randomly assign pieces
-	// X = first move
-	n := 1 + rand.Int()*(100-1)
-	if n < 50 {
-		player1.Assigned = X_PIECE
-		player2.Assigned = O_PIECE
-
-		currentPlayer = &player1
-		waitingPlayer = &player2
-	} else {
-		player1.Assigned = O_PIECE
-		player2.Assigned = X_PIECE
-
-		currentPlayer = &player2
-		waitingPlayer = &player1
-	}
-
-	// Update connections about assigned pieces
-	msg := fmt.Sprintf("%s is first move", currentPlayer.Name)
-	for p, c := range connections {
-		c.Write([]byte(ASSIGN))
-		c.Write([]byte(strconv.Itoa(p.Assigned)))
-
-		c.Write([]byte(BANNER))
-		c.Write([]byte(msg))
-	}
-
-	// Update current player turn state
-	connections[*currentPlayer].Write([]byte(PLAYER_STATE))
-	connections[*currentPlayer].Write([]byte("1"))
-
-	// Update waiting player turn state
-	connections[*waitingPlayer].Write([]byte(PLAYER_STATE))
-	connections[*waitingPlayer].Write([]byte("0"))
-}
-
 func gameLoop() {
 	initPieces()
 
@@ -176,7 +139,7 @@ func gameLoop() {
 				connections[*waitingPlayer].Write([]byte(BANNER))
 				connections[*waitingPlayer].Write([]byte(banner))
 
-				// Set player states
+				// Update player states
 				temp := currentPlayer
 				currentPlayer = waitingPlayer
 				waitingPlayer = temp
@@ -189,6 +152,43 @@ func gameLoop() {
 			}
 		}
 	}
+}
+
+func initPieces() {
+	// Randomly assign pieces
+	// X = first move
+	n := 1 + rand.Int()*(100-1)
+	if n < 50 {
+		player1.Assigned = X_PIECE
+		player2.Assigned = O_PIECE
+
+		currentPlayer = &player1
+		waitingPlayer = &player2
+	} else {
+		player1.Assigned = O_PIECE
+		player2.Assigned = X_PIECE
+
+		currentPlayer = &player2
+		waitingPlayer = &player1
+	}
+
+	// Update connections about assigned pieces
+	banner := fmt.Sprintf("%s is first move", currentPlayer.Name)
+	for p, c := range connections {
+		c.Write([]byte(ASSIGN))
+		c.Write([]byte(strconv.Itoa(p.Assigned)))
+
+		c.Write([]byte(BANNER))
+		c.Write([]byte(banner))
+	}
+
+	// Update current player turn state
+	connections[*currentPlayer].Write([]byte(PLAYER_STATE))
+	connections[*currentPlayer].Write([]byte("1"))
+
+	// Update waiting player turn state
+	connections[*waitingPlayer].Write([]byte(PLAYER_STATE))
+	connections[*waitingPlayer].Write([]byte("0"))
 }
 
 func cleanup(listener net.Listener) {
