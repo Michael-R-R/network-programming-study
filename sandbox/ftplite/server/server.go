@@ -1,30 +1,36 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"os"
 	"strings"
 )
 
+const ( // Message types
+	LS    = "ls"
+	CD    = "cd"
+	PWD   = "pwd"
+	EXIT  = "exit"
+	ERROR = "error"
+)
+
 type User struct {
 	WorkingDir string
+	Conn       net.Conn
 }
 
-type DirList struct {
-	Directories []string
+type Packet struct {
+	Keys   []string
+	Values []string
 }
-
-type ErrorMsg struct {
-	Error string
-}
-
-var connections map[string]net.Conn
 
 func init() {
-	connections = make(map[string]net.Conn)
+
 }
 
 func main() {
@@ -40,52 +46,50 @@ func main() {
 			continue
 		}
 
-		go handleConnection(conn)
+		user := User{WorkingDir: ".", Conn: conn}
+
+		go handleUser(user)
 	}
 }
 
-func handleConnection(conn net.Conn) {
-	defer delete(connections, conn.RemoteAddr().String())
-	defer conn.Close()
+func handleUser(user User) {
+	defer user.Conn.Close()
 
-	user := User{WorkingDir: "."}
-
-	connections[conn.RemoteAddr().String()] = conn
-
-	var buf [512]byte
+	conn := user.Conn
 
 	for {
-		// Read msg type
-		n, err := conn.Read(buf[:])
-		if err != nil {
-			handleError(err, conn)
+		// Read client packet
+		data, err := readAll(conn)
+		if handleError(err, conn) {
 			continue
 		}
 
-		msg := strings.TrimSpace(string(buf[0:n]))
+		var packet Packet
+		err = json.Unmarshal(data, &packet)
+		if handleError(err, conn) {
+			continue
+		}
 
-		switch strings.ToLower(msg) {
-		case "ls":
-			{
-				handleLS(&user, conn)
-			}
-		case "cd":
-			{
+		for i, key := range packet.Keys {
+			key = strings.TrimSpace(key)
+			key = strings.ToLower(key)
+			value := packet.Values[i]
 
-			}
-		case "pwd":
-			{
-
-			}
-		case "exit":
-			{
-				return
-			}
-		default:
-			{
-				errMsg := ErrorMsg{Error: "Invalid command..."}
-				data, _ := json.Marshal(errMsg)
-				conn.Write(data)
+			switch key {
+			case LS:
+				{
+					handleLS(&user)
+				}
+			case EXIT:
+				{
+					handleExit(&user)
+					return
+				}
+			default:
+				{
+					err = fmt.Errorf("invalid command: %s %s", key, value)
+					handleError(err, conn)
+				}
 			}
 		}
 	}
@@ -96,31 +100,71 @@ func handleError(err error, conn net.Conn) bool {
 		return false
 	}
 
-	msg := err.Error()
-	conn.Write([]byte(msg))
+	packet := Packet{Keys: make([]string, 1), Values: make([]string, 1)}
+	packet.Keys[0] = ERROR
+	packet.Values[0] = err.Error()
+
+	data, _ := json.Marshal(packet)
+
+	conn.Write(data)
 
 	return true
 }
 
-func handleLS(user *User, conn net.Conn) bool {
+func handleLS(user *User) bool {
+	conn := user.Conn
+
 	wd, err := os.Open(user.WorkingDir)
 	if handleError(err, conn) {
 		return false
 	}
 
-	list, err := wd.Readdirnames(-1)
+	dlist, err := wd.Readdirnames(-1)
 	if handleError(err, conn) {
 		return false
 	}
 
-	dir := DirList{Directories: list}
-
-	data, err := json.Marshal(dir)
-	if handleError(err, conn) {
-		return false
+	var val string
+	for _, d := range dlist {
+		val += fmt.Sprintf("%s,", d)
 	}
+
+	packet := Packet{Keys: make([]string, 1), Values: make([]string, 1)}
+	packet.Keys[0] = LS
+	packet.Values[0] = val
+
+	data, _ := json.Marshal(packet)
 
 	conn.Write(data)
 
 	return true
+}
+
+func handleExit(user *User) {
+	conn := user.Conn
+
+	fmt.Printf("Closing connection: %s\n", conn.RemoteAddr().String())
+}
+
+func readAll(conn net.Conn) ([]byte, error) {
+	result := bytes.NewBuffer(nil)
+	var buf [512]byte
+
+	for {
+		n, err := conn.Read(buf[:])
+		result.Write(buf[:n])
+
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+
+		if n < 512 {
+			break
+		}
+	}
+
+	return result.Bytes(), nil
 }

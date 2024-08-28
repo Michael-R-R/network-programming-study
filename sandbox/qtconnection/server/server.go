@@ -70,12 +70,12 @@ func handleClient(conn net.Conn) {
 }
 
 func readAll(conn net.Conn) ([]byte, error) {
-	resultBuf := bytes.NewBuffer(nil)
+	result := bytes.NewBuffer(nil)
 	var buf [512]byte
 
 	for {
 		n, err := conn.Read(buf[0:])
-		resultBuf.Write(buf[0:n])
+		result.Write(buf[0:n])
 
 		if err != nil {
 			if err == io.EOF {
@@ -89,5 +89,5 @@ func readAll(conn net.Conn) ([]byte, error) {
 		}
 	}
 
-	return resultBuf.Bytes(), nil
+	return result.Bytes(), nil
 }
