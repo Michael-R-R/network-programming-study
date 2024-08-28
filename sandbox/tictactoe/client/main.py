@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sys
+import sys, json
 
 try:
     import PyQt6.QtCore
@@ -22,6 +22,13 @@ from PyQt6.QtWidgets import (
     QLabel,
 )
 from PyQt6.QtNetwork import QTcpSocket
+
+class Packet(object):
+    def __init__(self,
+                 Keys: list[str],
+                 Values: list[str]) -> None:
+        self.keys = Keys
+        self.values = Values
 
 class Board(QWidget):
     tileSelected = pyqtSignal(int, int)
@@ -60,10 +67,11 @@ class Client(QWidget):
         print("Port:" + str(self.conn.peerPort()))
     
     def _tcpRead(self):
-        msg = self.conn.read(512).decode().strip(" \r\n")
-        data = self.conn.read(512).decode().strip(" \r\n")
+        data = self.conn.readAll().data().decode()
+        j = json.loads(data)
+        packet = Packet(**j)
         
-        print(msg)
+        print(data)
         
     def _connectPressed(self):
         self.conn.connectToHost("127.0.0.1", 1200)

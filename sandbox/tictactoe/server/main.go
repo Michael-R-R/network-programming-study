@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -11,19 +12,24 @@ import (
 )
 
 type GameBoard struct {
-	Board [][]int
+	Board [][]string
 }
 
 type Player struct {
 	Id       int
 	Name     string
-	Assigned int
+	Assigned string
+}
+
+type Packet struct {
+	Keys   []string
+	Values []string
 }
 
 const ( // Board piece types
-	NONE    = 0
-	X_PIECE = 1
-	O_PIECE = 2
+	NONE    = ""
+	X_PIECE = "X"
+	O_PIECE = "O"
 )
 
 const ( // Message types
@@ -43,7 +49,7 @@ var waitingPlayer *Player
 
 func init() {
 	connections = make(map[string]net.Conn)
-	gameBoard = GameBoard{Board: [][]int{
+	gameBoard = GameBoard{Board: [][]string{
 		{NONE, NONE, NONE},
 		{NONE, NONE, NONE},
 		{NONE, NONE, NONE},
@@ -99,7 +105,8 @@ func gameLoop() {
 
 	for {
 		conn := connections[currentPlayer.Name]
-
+		
+		//TODO read json and unmarshal
 		var buf [512]byte
 
 		// Read message type
@@ -115,13 +122,14 @@ func gameLoop() {
 		switch msg {
 		case BOARD_UPDATE:
 			{
+				// TODO read json and unmarshal
 				n, err = conn.Read(buf[:])
 				if err != nil {
 					fmt.Println(err)
 					return
 				}
 
-				// Parse and convert the data
+				// TODO Parse and convert the data from Packet
 				data := strings.TrimSpace(string(buf[0:n]))
 				rowcol := strings.Split(data, ",")
 				row, _ := strconv.Atoi(rowcol[0])
@@ -132,25 +140,35 @@ func gameLoop() {
 
 				// TODO check for winning state
 
-				// Update waiting player board state
-				connections[waitingPlayer.Name].Write([]byte(BOARD_UPDATE))
-				connections[waitingPlayer.Name].Write([]byte(data))
+				// Make current player state packet
+				cpckt := Packet{Keys: make([]string, 1), Values: make([]string, 1)}
 
-				// Update waiting player banner
-				banner := fmt.Sprintf("%s selected row: %d col: %d", currentPlayer.Name, row, col)
-				connections[waitingPlayer.Name].Write([]byte(BANNER))
-				connections[waitingPlayer.Name].Write([]byte(banner))
+				cpckt.Keys[0] = PLAYER_STATE
+				cpckt.Values[0] = "0"
+
+				// Make waiting player state packet
+				wpckt := Packet{Keys: make([]string, 3), Values: make([]string, 3)}
+
+				wpckt.Keys[0] = BOARD_UPDATE
+				wpckt.Values[0] = data
+
+				wpckt.Keys[1] = BANNER
+				wpckt.Values[1] = fmt.Sprintf("%s selected row: %d col: %d", currentPlayer.Name, row, col)
+
+				wpckt.Keys[2] = PLAYER_STATE
+				wpckt.Values[2] = "1"
+
+				// Send json packets
+				jcpckt, _ := json.Marshal(cpckt)
+				jwpckt, _ := json.Marshal(wpckt)
+
+				connections[currentPlayer.Name].Write(jcpckt)
+				connections[waitingPlayer.Name].Write(jwpckt)
 
 				// Update player states
 				temp := currentPlayer
 				currentPlayer = waitingPlayer
 				waitingPlayer = temp
-
-				connections[currentPlayer.Name].Write([]byte(PLAYER_STATE))
-				connections[currentPlayer.Name].Write([]byte("1"))
-
-				connections[waitingPlayer.Name].Write([]byte(PLAYER_STATE))
-				connections[waitingPlayer.Name].Write([]byte("0"))
 			}
 		}
 	}
@@ -174,26 +192,39 @@ func initPieces() {
 		waitingPlayer = &player1
 	}
 
-	// Update connections about assigned pieces
+	// Create a packet of data to send
+	cpckt := Packet{Keys: make([]string, 3), Values: make([]string, 3)}
+	wpckt := Packet{Keys: make([]string, 3), Values: make([]string, 3)}
+
+	// Send out banner message
 	banner := fmt.Sprintf("%s is first move", currentPlayer.Name)
-	for _, c := range connections {
-		c.Write([]byte(BANNER))
-		c.Write([]byte(banner))
-	}
 
-	// Update current player turn state
-	conn1 := connections[currentPlayer.Name]
-	conn1.Write([]byte(ASSIGN))
-	conn1.Write([]byte(strconv.Itoa(currentPlayer.Assigned)))
-	conn1.Write([]byte(PLAYER_STATE))
-	conn1.Write([]byte("1"))
+	cpckt.Keys[0] = BANNER
+	cpckt.Values[0] = banner
 
-	// Update waiting player turn state
-	conn2 := connections[waitingPlayer.Name]
-	conn2.Write([]byte(ASSIGN))
-	conn2.Write([]byte(strconv.Itoa(currentPlayer.Assigned)))
-	conn2.Write([]byte(PLAYER_STATE))
-	conn2.Write([]byte("0"))
+	wpckt.Keys[0] = BANNER
+	wpckt.Values[0] = banner
+
+	// Update current player state
+	cpckt.Keys[1] = ASSIGN
+	cpckt.Values[1] = currentPlayer.Assigned
+
+	cpckt.Keys[2] = PLAYER_STATE
+	cpckt.Values[2] = "1"
+
+	// Update waiting player state
+	wpckt.Keys[1] = ASSIGN
+	wpckt.Values[1] = waitingPlayer.Assigned
+
+	wpckt.Keys[2] = PLAYER_STATE
+	wpckt.Values[2] = "0"
+
+	// Write the packets
+	jcpckt, _ := json.Marshal(cpckt)
+	jwpckt, _ := json.Marshal(wpckt)
+
+	connections[currentPlayer.Name].Write(jcpckt)
+	connections[waitingPlayer.Name].Write(jwpckt)
 }
 
 func cleanup(listener net.Listener) {
