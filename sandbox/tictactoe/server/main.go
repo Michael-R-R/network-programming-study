@@ -128,22 +128,27 @@ func gameLoop() {
 					row, _ := strconv.Atoi(rowcol[0])
 					col, _ := strconv.Atoi(rowcol[1])
 
+					// TODO verify selection
+
 					// Record player selection
 					gameBoard.Board[row][col] = currentPlayer.Assigned
 
 					// TODO check for winning state
 
-					// Make current player state packet
-					cpckt := Packet{Keys: make([]string, 1), Values: make([]string, 1)}
+					// Make current player packet
+					cpckt := Packet{Keys: make([]string, 2), Values: make([]string, 2)}
 
-					cpckt.Keys[0] = PLAYER_STATE
-					cpckt.Values[0] = "0"
+					cpckt.Keys[0] = BOARD_UPDATE
+					cpckt.Values[0] = currentPlayer.Assigned + "," + value
 
-					// Make waiting player state packet
+					cpckt.Keys[1] = PLAYER_STATE
+					cpckt.Values[1] = "0"
+
+					// Make waiting player packet
 					wpckt := Packet{Keys: make([]string, 3), Values: make([]string, 3)}
 
 					wpckt.Keys[0] = BOARD_UPDATE
-					wpckt.Values[0] = value
+					wpckt.Values[0] = currentPlayer.Assigned + "," + value
 
 					wpckt.Keys[1] = BANNER
 					wpckt.Values[1] = fmt.Sprintf("%s selected row: %d col: %d", currentPlayer.Name, row, col)
