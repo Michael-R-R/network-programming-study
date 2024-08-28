@@ -105,8 +105,11 @@ func gameLoop() {
 
 	for {
 		conn := connections[currentPlayer.Name]
-		
-		//TODO read json and unmarshal
+
+		// TODO connection data read needs to be
+		// overhauled to unmarshal a json Packet struct
+
+		// TODO read json and unmarshal
 		var buf [512]byte
 
 		// Read message type
