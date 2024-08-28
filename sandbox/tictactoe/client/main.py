@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import sys, json, types
+import sys, json
 from enum import Enum
 
 try:
@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QGridLayout,
-    QLayout,
     QSizePolicy,
     QSpacerItem,
     QPushButton,
@@ -103,7 +102,6 @@ class Client(QWidget):
         j = json.loads(data)
         packet = Packet(**j)
         
-        # TODO parse packet values
         for i in range(len(packet.keys)):
             key = packet.keys[i]
             value = packet.values[i]
